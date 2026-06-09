@@ -47,6 +47,25 @@ describe("parseSecretOutput", () => {
   it("handles CRLF line endings", () => {
     expect(parseSecretOutput("K=v\r\nJ=w\r\n", "J")).toBe("w");
   });
+
+  it("returns null (not a wrong value) when a multi-key dump lacks the wanted key", () => {
+    // Regression: the old greedy heuristic could mis-handle this. A dump with
+    // other KEY=VALUE lines but not ours must resolve to null, never another
+    // line's value.
+    const blob = "FOO=secretfoo\nBAR=secretbar\n";
+    expect(parseSecretOutput(blob, "ANTHROPIC_TOKEN")).toBeNull();
+  });
+
+  it("prefers an exact dotenv match over treating output as a bare value", () => {
+    const blob = "OTHER=x\nANTHROPIC_TOKEN=right\n";
+    expect(parseSecretOutput(blob, "ANTHROPIC_TOKEN")).toBe("right");
+  });
+
+  it("treats single-line output with no '=' as a bare value", () => {
+    expect(parseSecretOutput("just-the-secret\n", "ANY")).toBe(
+      "just-the-secret",
+    );
+  });
 });
 
 describe("CommandSecretsProvider", () => {

@@ -24,28 +24,37 @@ export function parseSecretOutput(
   const text = stdout.replace(/\r\n/g, "\n");
   const lines = text.split("\n");
   const ENV_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
-  const looksLikeDotenv = lines.some((l) => ENV_LINE.test(l.trim()));
 
-  if (looksLikeDotenv) {
-    for (const raw of lines) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const m = line.match(ENV_LINE);
-      if (!m) continue;
-      if (m[1] !== wantedKey) continue;
-      let value = m[2].trim();
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1);
-      }
+  const unquote = (v: string): string => {
+    const t = v.trim();
+    if (
+      (t.startsWith('"') && t.endsWith('"')) ||
+      (t.startsWith("'") && t.endsWith("'"))
+    ) {
+      return t.slice(1, -1);
+    }
+    return t;
+  };
+
+  // 1. Exact dotenv match wins: scan for a `wantedKey=...` line. This is
+  //    deterministic and never returns another key's value.
+  const dotenvLines = lines
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && ENV_LINE.test(l));
+  for (const line of dotenvLines) {
+    const m = line.match(ENV_LINE)!;
+    if (m[1] === wantedKey) {
+      const value = unquote(m[2]);
       return value !== "" ? value : null;
     }
-    return null; // dotenv blob that doesn't contain the wanted key
   }
 
-  // Bare value.
+  // 2. The output is a multi-key dotenv dump that does NOT contain the wanted
+  //    key → null, rather than mis-returning an unrelated line as a bare value.
+  if (dotenvLines.length > 0) return null;
+
+  // 3. Otherwise treat the whole output as a single bare value (a per-key
+  //    helper that printed just the secret).
   const value = text.trim();
   return value !== "" ? value : null;
 }
@@ -64,6 +73,14 @@ export function parseSecretOutput(
  *   - Hard timeout + output cap; any failure (non-zero exit, timeout, empty)
  *     resolves to null rather than throwing.
  *   - Resolved values are never logged or written to disk.
+ *   - The helper inherits the current process environment (so it can find PATH,
+ *     HOME, DISPLAY, etc.) plus `HERMES_SECRET_KEY`. That means a helper can see
+ *     secrets already present in the environment — acceptable because the helper
+ *     is the user's own configured binary, but noted so the trust scope is explicit.
+ *   - Used only for targeted single-key resolution and `list()` (which runs the
+ *     helper at most once); it is NEVER called per-key in a loop, so a helper
+ *     that blocks (e.g. on a vault unlock prompt) can't be spawned dozens of
+ *     times for one message.
  */
 export class CommandSecretsProvider implements SecretsProvider {
   readonly id = "command";

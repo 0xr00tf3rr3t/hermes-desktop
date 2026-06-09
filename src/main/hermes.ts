@@ -46,7 +46,7 @@ import {
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
 import { readModels } from "./models";
-import { getSecret } from "./secrets";
+import { providerListSafe } from "./secrets";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
@@ -2135,12 +2135,19 @@ function sendMessageViaCli(
     "TINKER_API_KEY",
     "WANDB_API_KEY",
   ];
+  // Resolve the configured secrets provider's enumerable secrets ONCE (not
+  // per-key): a `command` backend would otherwise spawn the helper ~30 times
+  // synchronously here, freezing the main process if the helper blocks on an
+  // unlock prompt. list() runs the helper at most once. A bare-value helper that
+  // can't enumerate returns {} — those users resolve a key via the targeted
+  // getSecret() path elsewhere, never this broadcast loop (which would otherwise
+  // spray one secret across every vendor key name).
+  const providerSecrets = providerListSafe(profile);
   for (const key of KNOWN_API_KEYS) {
     if (env[key]) continue; // already present (e.g. from process.env spread)
-    // Prefer the .env file value; fall back to the configured secrets provider
-    // (e.g. a `command` backend) so a vault-resolved key still reaches the agent
-    // without being written to plaintext .env.
-    const value = profileEnv[key] || getSecret(key, profile);
+    // Prefer the .env file value, then the provider's enumerated secrets, so a
+    // vault-resolved key reaches the agent without being written to plaintext.
+    const value = profileEnv[key] || providerSecrets[key];
     if (value) env[key] = value;
   }
 

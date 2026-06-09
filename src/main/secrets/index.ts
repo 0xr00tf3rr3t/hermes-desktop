@@ -51,3 +51,19 @@ export function resolvedSecrets(profile?: string): Record<string, string> {
   }
   return merged;
 }
+
+/**
+ * The configured provider's enumerable secrets only (no process.env overlay),
+ * resolved at most once. Intended for the gateway-spawn broadcast loop, which
+ * already layers process.env separately and wants to fill ONLY the keys the
+ * provider can positively enumerate — a bare-value `command` helper returns {}
+ * here, so its single value is never sprayed across every known key name. Never
+ * throws.
+ */
+export function providerListSafe(profile?: string): Record<string, string> {
+  try {
+    return getSecretsProvider(profile).list(profile);
+  } catch {
+    return {};
+  }
+}
