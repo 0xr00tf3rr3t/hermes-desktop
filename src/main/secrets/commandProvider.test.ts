@@ -125,6 +125,30 @@ describe("CommandSecretsProvider", () => {
     expect(provider.get("K")).toBeNull();
   });
 
+  it("kills a slow helper at the timeout bound and degrades to null (no long main-process freeze)", () => {
+    // Regression for the secrets-provider review (design (b)): resolution runs
+    // synchronously on the Electron main process, so the helper timeout doubles
+    // as the worst-case UI-freeze ceiling. A helper that blocks past the bound
+    // MUST be killed and resolve to null — and do so WELL under the old 10s cap.
+    // If COMMAND_TIMEOUT_MS is bumped back up (or the cap removed), this fails.
+    mockedGetConfigValue.mockReturnValue("sleep 30");
+    const started = Date.now();
+    const out = provider.get("SLOW_KEY");
+    const elapsed = Date.now() - started;
+    expect(out).toBeNull();
+    // Bound is 3s; allow generous spawn/teardown slack but stay far below 10s.
+    expect(elapsed).toBeLessThan(6_000);
+  });
+
+  it("list() also enforces the timeout bound on a slow helper", () => {
+    mockedGetConfigValue.mockReturnValue("sleep 30");
+    const started = Date.now();
+    const out = provider.list();
+    const elapsed = Date.now() - started;
+    expect(out).toEqual({});
+    expect(elapsed).toBeLessThan(6_000);
+  });
+
   it("list() returns a dotenv map from the command, {} for a bare value", () => {
     mockedGetConfigValue.mockReturnValue("printf 'A=1\\nB=2\\n'");
     expect(provider.list()).toEqual({ A: "1", B: "2" });

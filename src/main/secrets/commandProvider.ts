@@ -2,8 +2,22 @@ import { execFileSync } from "child_process";
 import type { SecretsProvider } from "./provider";
 import { getConfigValue } from "../config";
 
-/** Hard cap so a hung helper can never wedge a turn. */
-const COMMAND_TIMEOUT_MS = 10_000;
+/**
+ * Hard cap so a hung helper can never wedge a turn. Kept deliberately TIGHT (3s)
+ * because resolution runs synchronously on the Electron MAIN process: a slow or
+ * blocking helper freezes the UI for up to this duration. A configured `command`
+ * helper MUST therefore be fast and NON-INTERACTIVE (e.g. `keepassxc-cli` against
+ * an already-unlocked DB, `secret-tool lookup`, or `cat`-ing a tmpfs env file) —
+ * NOT a helper that prompts for a touch/PIN at gateway-spawn time.
+ *
+ * FUTURE (durable fix, design (a)): make the SecretsProvider interface async
+ * (`Promise<string | null>`) using `execFile` so a slow helper never blocks the
+ * main process, lifting this constraint. Deferred because the async ripple
+ * reaches `buildGatewayEnv` -> `startGatewayDetailed` (a sync exported fn) and
+ * its callers in the gateway-lifecycle path; the blast radius exceeded the
+ * benefit for an opt-in provider. See WORKFLOW.md / the secrets-provider review.
+ */
+const COMMAND_TIMEOUT_MS = 3_000;
 /** Defensive cap on helper output (1 MiB) — a misbehaving command can't OOM us. */
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 
