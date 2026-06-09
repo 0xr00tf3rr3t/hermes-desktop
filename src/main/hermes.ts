@@ -46,6 +46,7 @@ import {
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
 import { readModels } from "./models";
+import { getSecret } from "./secrets";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { URL_KEY_MAP, OPENAI_COMPAT_PROVIDERS } from "../shared/url-key-map";
@@ -2135,9 +2136,12 @@ function sendMessageViaCli(
     "WANDB_API_KEY",
   ];
   for (const key of KNOWN_API_KEYS) {
-    if (profileEnv[key] && !env[key]) {
-      env[key] = profileEnv[key];
-    }
+    if (env[key]) continue; // already present (e.g. from process.env spread)
+    // Prefer the .env file value; fall back to the configured secrets provider
+    // (e.g. a `command` backend) so a vault-resolved key still reaches the agent
+    // without being written to plaintext .env.
+    const value = profileEnv[key] || getSecret(key, profile);
+    if (value) env[key] = value;
   }
 
   const isCustomEndpoint = OPENAI_COMPAT_PROVIDERS.has(mc.provider);

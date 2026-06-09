@@ -1,0 +1,116 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseSecretOutput, CommandSecretsProvider } from "./commandProvider";
+
+// getConfigValue is the only config dependency of the command provider; mock it
+// so the tests don't touch a real config.yaml.
+vi.mock("../config", () => ({
+  getConfigValue: vi.fn(),
+}));
+import { getConfigValue } from "../config";
+
+const mockedGetConfigValue = vi.mocked(getConfigValue);
+
+describe("parseSecretOutput", () => {
+  it("returns a bare value (single-secret helper)", () => {
+    expect(parseSecretOutput("hunter2\n", "ANYTHING")).toBe("hunter2");
+  });
+
+  it("trims surrounding whitespace/newlines from a bare value", () => {
+    expect(parseSecretOutput("  s3cr3t  \n\n", "K")).toBe("s3cr3t");
+  });
+
+  it("returns null for empty output", () => {
+    expect(parseSecretOutput("", "K")).toBeNull();
+    expect(parseSecretOutput("   \n  ", "K")).toBeNull();
+  });
+
+  it("parses a dotenv blob and returns the requested key", () => {
+    const blob = "API_SERVER_KEY=abc123\nANTHROPIC_TOKEN=sk-xyz\n";
+    expect(parseSecretOutput(blob, "ANTHROPIC_TOKEN")).toBe("sk-xyz");
+    expect(parseSecretOutput(blob, "API_SERVER_KEY")).toBe("abc123");
+  });
+
+  it("returns null when a dotenv blob lacks the requested key", () => {
+    expect(parseSecretOutput("FOO=1\nBAR=2\n", "MISSING")).toBeNull();
+  });
+
+  it("strips surrounding quotes from dotenv values", () => {
+    expect(parseSecretOutput('K="quoted value"\n', "K")).toBe("quoted value");
+    expect(parseSecretOutput("K='single'\n", "K")).toBe("single");
+  });
+
+  it("ignores comments and blank lines in a dotenv blob", () => {
+    const blob = "# a comment\n\nK=v\n";
+    expect(parseSecretOutput(blob, "K")).toBe("v");
+  });
+
+  it("handles CRLF line endings", () => {
+    expect(parseSecretOutput("K=v\r\nJ=w\r\n", "J")).toBe("w");
+  });
+});
+
+describe("CommandSecretsProvider", () => {
+  const provider = new CommandSecretsProvider();
+
+  beforeEach(() => {
+    mockedGetConfigValue.mockReset();
+  });
+  afterEach(() => {
+    delete process.env.HERMES_TEST_MARKER;
+  });
+
+  it("returns null when no command is configured", () => {
+    mockedGetConfigValue.mockReturnValue(null);
+    expect(provider.get("ANY_KEY")).toBeNull();
+  });
+
+  it("runs the configured command and returns its bare-value stdout", () => {
+    mockedGetConfigValue.mockReturnValue("printf 'resolved-value'");
+    expect(provider.get("SOME_KEY")).toBe("resolved-value");
+  });
+
+  it("passes the requested key via $HERMES_SECRET_KEY, not the shell string", () => {
+    // The command echoes the env var; if the key were interpolated into the
+    // command string this would differ. It must arrive as data via the env.
+    mockedGetConfigValue.mockReturnValue('printf "%s" "$HERMES_SECRET_KEY"');
+    expect(provider.get("MY_LOOKUP_KEY")).toBe("MY_LOOKUP_KEY");
+  });
+
+  it("is injection-safe: a hostile key name cannot execute", () => {
+    // If the key were interpolated into the shell, this would try to run `id`.
+    // Because it's passed as data, the command just echoes the literal string.
+    mockedGetConfigValue.mockReturnValue('printf "%s" "$HERMES_SECRET_KEY"');
+    const hostile = '"; id; echo "';
+    expect(provider.get(hostile)).toBe(hostile);
+  });
+
+  it("does not let a hostile key name run a side-effect command", () => {
+    // A command that would only set the marker if the injected payload executed.
+    mockedGetConfigValue.mockReturnValue('printf "%s" "$HERMES_SECRET_KEY"');
+    const hostile = "$(touch /tmp/hermes-injection-canary-should-not-exist)";
+    const out = provider.get(hostile);
+    // The literal string is echoed back; the subshell never ran.
+    expect(out).toBe(hostile);
+  });
+
+  it("selects the requested key from a dotenv-dumping command", () => {
+    mockedGetConfigValue.mockReturnValue(
+      "printf 'API_SERVER_KEY=aaa\\nANTHROPIC_TOKEN=bbb\\n'",
+    );
+    expect(provider.get("ANTHROPIC_TOKEN")).toBe("bbb");
+    expect(provider.get("API_SERVER_KEY")).toBe("aaa");
+  });
+
+  it("returns null on a non-zero exit", () => {
+    mockedGetConfigValue.mockReturnValue("exit 7");
+    expect(provider.get("K")).toBeNull();
+  });
+
+  it("list() returns a dotenv map from the command, {} for a bare value", () => {
+    mockedGetConfigValue.mockReturnValue("printf 'A=1\\nB=2\\n'");
+    expect(provider.list()).toEqual({ A: "1", B: "2" });
+
+    mockedGetConfigValue.mockReturnValue("printf 'just-a-value'");
+    expect(provider.list()).toEqual({});
+  });
+});

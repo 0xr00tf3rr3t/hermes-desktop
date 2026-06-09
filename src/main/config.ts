@@ -979,7 +979,11 @@ export function getApiServerKey(profile?: string): string {
       profile && profile !== "default"
         ? getConfigValue("API_SERVER_KEY")
         : null,
-    envProfile: envForProfile.API_SERVER_KEY ?? null,
+    // Prefer the .env file value, then a runtime-injected one (e.g. a vault that
+    // unseals API_SERVER_KEY into the process environment rather than writing it
+    // to .env). This is the env arm of the secrets-provider resolution order.
+    envProfile:
+      envForProfile.API_SERVER_KEY ?? process.env.API_SERVER_KEY ?? null,
     envDefault:
       profile && profile !== "default"
         ? (readEnv().API_SERVER_KEY ?? null)
