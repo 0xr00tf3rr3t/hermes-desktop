@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseSecretOutput, CommandSecretsProvider } from "./commandProvider";
+import {
+  parseSecretOutput,
+  CommandSecretsProvider,
+  unquoteDotenvValue,
+} from "./commandProvider";
 
 // getConfigValue is the only config dependency of the command provider; mock it
 // so the tests don't touch a real config.yaml.
@@ -65,6 +69,35 @@ describe("parseSecretOutput", () => {
     expect(parseSecretOutput("just-the-secret\n", "ANY")).toBe(
       "just-the-secret",
     );
+  });
+});
+
+describe("unquoteDotenvValue", () => {
+  it("strips matching double and single quotes", () => {
+    expect(unquoteDotenvValue('"value"')).toBe("value");
+    expect(unquoteDotenvValue("'value'")).toBe("value");
+  });
+
+  it("yields empty string for empty quote pairs", () => {
+    expect(unquoteDotenvValue('""')).toBe("");
+    expect(unquoteDotenvValue("''")).toBe("");
+  });
+
+  it("leaves a lone quote intact (does not collapse to empty)", () => {
+    // Regression: a length<2 guard prevents a single quote char from being
+    // sliced into the empty string.
+    expect(unquoteDotenvValue('"')).toBe('"');
+    expect(unquoteDotenvValue("'")).toBe("'");
+  });
+
+  it("does not strip mismatched or partial quotes", () => {
+    expect(unquoteDotenvValue("\"value'")).toBe("\"value'");
+    expect(unquoteDotenvValue('value"')).toBe('value"');
+    expect(unquoteDotenvValue('"unterminated')).toBe('"unterminated');
+  });
+
+  it("trims surrounding whitespace before considering quotes", () => {
+    expect(unquoteDotenvValue('  "padded"  ')).toBe("padded");
   });
 });
 

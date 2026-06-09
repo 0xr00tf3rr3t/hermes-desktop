@@ -22,6 +22,24 @@ const COMMAND_TIMEOUT_MS = 3_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 /**
+ * Strip a single layer of matching surrounding quotes from a dotenv value.
+ * Requires length >= 2 so a lone quote (`"`) is left intact rather than
+ * collapsing to empty, and `""`/`''` correctly yield an empty string. Shared by
+ * the single-key parser and list() so both unquote identically.
+ */
+export function unquoteDotenvValue(raw: string): string {
+  const t = raw.trim();
+  if (
+    t.length >= 2 &&
+    ((t.startsWith('"') && t.endsWith('"')) ||
+      (t.startsWith("'") && t.endsWith("'")))
+  ) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
+
+/**
  * Parse a `secret-fetch` command's stdout. Supports BOTH shapes (design (c)):
  *   - a bare value (single secret): the whole trimmed stdout is the value.
  *   - a dotenv blob (KEY=VALUE lines): when stdout has '=' lines, parse them and
@@ -39,17 +57,6 @@ export function parseSecretOutput(
   const lines = text.split("\n");
   const ENV_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
 
-  const unquote = (v: string): string => {
-    const t = v.trim();
-    if (
-      (t.startsWith('"') && t.endsWith('"')) ||
-      (t.startsWith("'") && t.endsWith("'"))
-    ) {
-      return t.slice(1, -1);
-    }
-    return t;
-  };
-
   // 1. Exact dotenv match wins: scan for a `wantedKey=...` line. This is
   //    deterministic and never returns another key's value.
   const dotenvLines = lines
@@ -58,7 +65,7 @@ export function parseSecretOutput(
   for (const line of dotenvLines) {
     const m = line.match(ENV_LINE)!;
     if (m[1] === wantedKey) {
-      const value = unquote(m[2]);
+      const value = unquoteDotenvValue(m[2]);
       return value !== "" ? value : null;
     }
   }
@@ -95,6 +102,13 @@ export function parseSecretOutput(
  *     helper at most once); it is NEVER called per-key in a loop, so a helper
  *     that blocks (e.g. on a vault unlock prompt) can't be spawned dozens of
  *     times for one message.
+ *   - PLATFORM: resolution runs the helper via `/bin/sh -c`, so the `command`
+ *     provider is POSIX-only (Linux/macOS). On Windows there is no `/bin/sh`;
+ *     the helper would fail to spawn and every key degrades to null (logged).
+ *     This is acceptable because the feature targets the vault/tmpfs workflow on
+ *     Linux; Windows users stay on the default `env` provider. A future change
+ *     could detect the platform and use `cmd /c`/PowerShell, but that is out of
+ *     scope for this opt-in provider.
  */
 export class CommandSecretsProvider implements SecretsProvider {
   readonly id = "command";
@@ -117,8 +131,13 @@ export class CommandSecretsProvider implements SecretsProvider {
         windowsHide: true,
       });
       return parseSecretOutput(stdout, key);
-    } catch {
-      // Non-zero exit, timeout, spawn failure — degrade to "no value".
+    } catch (err) {
+      // Non-zero exit, timeout, spawn failure — degrade to "no value". Log the
+      // REASON (never the secret value or command string) so a misconfigured
+      // helper is diagnosable instead of silently resolving to null.
+      console.warn(
+        `[secrets:command] get(${key}) failed; resolving null: ${(err as Error).message}`,
+      );
       return null;
     }
   }
@@ -147,17 +166,13 @@ export class CommandSecretsProvider implements SecretsProvider {
         if (!line || line.startsWith("#")) continue;
         const m = line.match(ENV_LINE);
         if (!m) continue;
-        let value = m[2].trim();
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        out[m[1]] = value;
+        out[m[1]] = unquoteDotenvValue(m[2]);
       }
       return out;
-    } catch {
+    } catch (err) {
+      console.warn(
+        `[secrets:command] list() failed; resolving {}: ${(err as Error).message}`,
+      );
       return {};
     }
   }
