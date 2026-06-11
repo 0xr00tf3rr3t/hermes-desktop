@@ -17,6 +17,7 @@ import {
   setAnalyticsConsent,
 } from "../../utils/analytics";
 import { ConfigHealth } from "./ConfigHealth";
+import { SecretsProviders } from "./SecretsProviders";
 
 const DISCORD_COMMUNITY_URL = "https://discord.gg/vMwcnNPHc";
 
@@ -485,6 +486,8 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       <h1 className="settings-header">{t("settings.title")}</h1>
 
       <ConfigHealth />
+
+      <SecretsProviders profile={profile} />
 
       <div className="settings-section">
         <div className="settings-section-title">
