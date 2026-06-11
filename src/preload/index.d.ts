@@ -328,7 +328,9 @@ interface HermesAPI {
     mimeType: string,
     profile?: string,
   ) => Promise<string>;
-  getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
+  getApiServerKeyStatus: (
+    profile?: string,
+  ) => Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
   copyToClipboard: (text: string) => Promise<void>;
   onContextMenuCopyChat: (

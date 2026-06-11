@@ -89,6 +89,27 @@ describe("parseSecretOutput", () => {
   });
 });
 
+describe("parseSecretOutput whitespace-only values (V3)", () => {
+  it("returns null for whitespace-only bare output", () => {
+    expect(parseSecretOutput(" \n", "K")).toBeNull();
+  });
+
+  it("returns null for tab-only bare output", () => {
+    expect(parseSecretOutput("\t\n", "K")).toBeNull();
+  });
+
+  it("trims leading/trailing whitespace but preserves the value", () => {
+    expect(parseSecretOutput("  actual-secret  \n", "K")).toBe("actual-secret");
+  });
+
+  it("returns null for a quoted whitespace-only dotenv value", () => {
+    // `K="  "` unquotes to whitespace, which previously survived the
+    // empty-check (`value !== ""`) and looked like a valid key.
+    expect(parseSecretOutput('K="   "\n', "K")).toBeNull();
+    expect(parseSecretOutput("K='\t'\n", "K")).toBeNull();
+  });
+});
+
 describe("unquoteDotenvValue", () => {
   it("strips matching double and single quotes", () => {
     expect(unquoteDotenvValue('"value"')).toBe("value");

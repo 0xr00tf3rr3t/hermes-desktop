@@ -307,7 +307,9 @@ const hermesAPI = {
   ): Promise<string> =>
     ipcRenderer.invoke("transcribe-audio", audio, mimeType, profile),
 
-  getApiServerKeyStatus: (profile?: string): Promise<{ hasKey: boolean }> =>
+  getApiServerKeyStatus: (
+    profile?: string,
+  ): Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }> =>
     ipcRenderer.invoke("get-api-server-key-status", profile),
 
   generateApiServerKey: (profile?: string): Promise<{ key: string }> =>

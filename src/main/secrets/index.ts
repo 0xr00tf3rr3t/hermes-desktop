@@ -77,3 +77,43 @@ export function providerListSafe(profile?: string): Record<string, string> {
     return {};
   }
 }
+
+/**
+ * Audit-facing view: the same fully-resolved map as `resolvedSecrets()`, but
+ * ALSO overlays the parsed `.env` file beneath the provider. This mirrors
+ * getApiServerKey()'s order (process.env > .env > provider) and is the
+ * authoritative "do I have this key, anywhere?" view for checks that need to
+ * reason about whether a secret is configured at all, not about which layer it
+ * came from.
+ *
+ * The default `env` provider returns the .env map unchanged, so env-provider
+ * users see no behavior change. For a `command` provider pointing at a vault
+ * dump, this is what lets the config-health audit avoid false
+ * "API_SERVER_KEY is not set" warnings for vault-only users.
+ *
+ * Never throws.
+ */
+export function resolvedSecretMap(profile?: string): Record<string, string> {
+  // Start with the provider (lowest precedence). .env then process.env
+  // REPLACE any keys they have, in order — so the final precedence is
+  // process.env > .env > provider, matching getSecret() and getApiServerKey().
+  const merged: Record<string, string> = { ...providerListSafe(profile) };
+  // Overlay the .env file above the provider — explicit .env entries win
+  // over vault values, matching the gateway's own resolution policy. The
+  // .env reader is a shared cached object, so copy before mutating.
+  try {
+    // Lazy require to avoid a circular import (config -> secrets -> config).
+    const { readEnv } = require("../config") as typeof import("../config");
+    const env = readEnv(profile);
+    for (const [k, v] of Object.entries(env)) {
+      if (v != null && v !== "") merged[k] = v;
+    }
+  } catch {
+    // config not loadable — provider-only view is fine for the audit
+  }
+  // Overlay process.env above .env (top of the precedence chain).
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v != null && v !== "") merged[k] = v;
+  }
+  return merged;
+}

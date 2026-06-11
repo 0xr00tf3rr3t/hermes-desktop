@@ -125,7 +125,7 @@ import {
   setConnectionConfig,
   getPlatformEnabled,
   setPlatformEnabled,
-  getApiServerKey,
+  getApiServerKeyStatus,
 } from "./config";
 import {
   getAuxiliaryConfig,
@@ -787,10 +787,11 @@ function setupIPC(): void {
 
   // API_SERVER_KEY management — lets the renderer detect a missing key and
   // generate one with a button click (local mode) or show instructions (remote/SSH).
-  ipcMain.handle("get-api-server-key-status", (_event, profile?: string) => {
-    const key = getApiServerKey(profile);
-    return { hasKey: key.length > 0 };
-  });
+  // Additive shape: `hasKey` stays the required primary field; `providerId` /
+  // `checkedAt` are optional extras for a follow-up Settings/Gateway UI.
+  ipcMain.handle("get-api-server-key-status", (_event, profile?: string) =>
+    getApiServerKeyStatus(profile),
+  );
 
   ipcMain.handle(
     "generate-api-server-key",

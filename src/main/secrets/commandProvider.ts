@@ -69,7 +69,9 @@ export function parseSecretOutput(
     const m = line.match(ENV_LINE)!;
     if (m[1] === wantedKey) {
       const value = unquoteDotenvValue(m[2]);
-      return value !== "" ? value : null;
+      // Whitespace-only (e.g. a quoted `K="  "` placeholder) is "no value":
+      // it would otherwise flow into an Authorization header → guaranteed 401.
+      return value.trim() !== "" ? value : null;
     }
   }
 
@@ -82,7 +84,8 @@ export function parseSecretOutput(
   if (dotenvLines.length > 1) return null;
 
   // 3. Otherwise treat the whole output as a single bare value (a per-key
-  //    helper that printed just the secret).
+  //    helper that printed just the secret). Trim first so whitespace-only
+  //    output (a ' '/'\t' placeholder entry) resolves to null, never a "key".
   const value = text.trim();
   return value !== "" ? value : null;
 }
