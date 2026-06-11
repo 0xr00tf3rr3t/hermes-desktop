@@ -34,6 +34,25 @@ describe("secrets resolution", () => {
     expect(getSecretsProvider().id).toBe("command");
   });
 
+  it("falls back to env on an unknown non-empty provider id and warns exactly once", () => {
+    // Regression: a typo'd id (e.g. "comand") used to silently select the
+    // plaintext env provider with no diagnostic.
+    mockedGetConfigValue.mockImplementation((key: string) =>
+      key === "secrets.provider" ? "comand" : null,
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(getSecretsProvider().id).toBe("env");
+      expect(getSecretsProvider().id).toBe("env");
+      const unknownIdWarnings = warnSpy.mock.calls
+        .flat()
+        .filter((m) => typeof m === "string" && m.includes('"comand"'));
+      expect(unknownIdWarnings).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it("backwards-compat: with no provider configured, getSecret matches readEnv", () => {
     mockedGetConfigValue.mockReturnValue(null);
     mockedReadEnv.mockReturnValue({ DEEPSEEK_API_KEY: "from-dotenv" });

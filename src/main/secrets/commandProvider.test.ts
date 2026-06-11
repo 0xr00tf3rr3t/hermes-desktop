@@ -70,6 +70,23 @@ describe("parseSecretOutput", () => {
       "just-the-secret",
     );
   });
+
+  it("round-trips a bare base64 secret with '=' padding", () => {
+    // Regression: "dGVzdA==" matches the KEY=VALUE shape (key "dGVzdA",
+    // value "="), so a single env-shaped line used to be misclassified as a
+    // one-line dotenv dump lacking the wanted key and resolved to null.
+    expect(parseSecretOutput("dGVzdA==\n", "ANTHROPIC_API_KEY")).toBe(
+      "dGVzdA==",
+    );
+  });
+
+  it("treats a single non-matching env-shaped line as a bare value, not a dump", () => {
+    expect(parseSecretOutput("abc=def\n", "WANTED_KEY")).toBe("abc=def");
+  });
+
+  it("still treats >=2 env-shaped lines lacking the wanted key as a dump (null)", () => {
+    expect(parseSecretOutput("FOO=1\nBAR=2\n", "WANTED_KEY")).toBeNull();
+  });
 });
 
 describe("unquoteDotenvValue", () => {
@@ -156,6 +173,25 @@ describe("CommandSecretsProvider", () => {
   it("returns null on a non-zero exit", () => {
     mockedGetConfigValue.mockReturnValue("exit 7");
     expect(provider.get("K")).toBeNull();
+  });
+
+  it("failure log never contains helper stderr or the command string", () => {
+    // Regression: execFileSync's err.message embeds the full command string
+    // AND the helper's stderr — the catch blocks must log structured fields
+    // (code/signal) only.
+    const cmd = "printf 'STDERR_SECRET_MARKER' >&2; exit 1";
+    mockedGetConfigValue.mockReturnValue(cmd);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(provider.get("K")).toBeNull();
+      expect(provider.list()).toEqual({});
+      expect(warnSpy).toHaveBeenCalled();
+      const logged = warnSpy.mock.calls.flat().join("\n");
+      expect(logged).not.toContain("STDERR_SECRET_MARKER");
+      expect(logged).not.toContain(cmd);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("kills a slow helper at the timeout bound and degrades to null (no long main-process freeze)", () => {

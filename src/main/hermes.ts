@@ -742,7 +742,7 @@ function tuiGatewayPython(): string {
   return HERMES_PYTHON;
 }
 
-function tuiGatewayEnv(profile?: string): Record<string, string> {
+export function tuiGatewayEnv(profile?: string): Record<string, string> {
   const resolved = resolveProfile(profile);
   const envPathDelimiter = process.platform === "win32" ? ";" : ":";
   const env: Record<string, string> = {
@@ -760,6 +760,12 @@ function tuiGatewayEnv(profile?: string): Record<string, string> {
   if (resolved) env.HERMES_PROFILE = resolved;
   for (const [key, value] of Object.entries(readEnv(profile))) {
     if (value) env[key] = value;
+  }
+  // Overlay provider-enumerated secrets BENEATH the values above (fill only
+  // keys still absent), so a `command`-provider user gets the same resolved
+  // key set here as on the CLI fallback path: process.env > .env > provider.
+  for (const [key, value] of Object.entries(providerListSafe(profile))) {
+    if (value && !env[key]) env[key] = value;
   }
   return env;
 }
@@ -2746,7 +2752,7 @@ function gatewayLogPath(profile?: string): string {
   return join(logDir, "gateway-stderr.log");
 }
 
-function buildGatewayEnv(profile?: string): Record<string, string> {
+export function buildGatewayEnv(profile?: string): Record<string, string> {
   // Make sure this profile's config.yaml enables the api_server and binds the
   // profile's own port before we spawn.
   ensureApiServerConfig(profile);
@@ -2768,6 +2774,16 @@ function buildGatewayEnv(profile?: string): Record<string, string> {
   const profileEnv = readEnv(profile);
   for (const [k, value] of Object.entries(profileEnv)) {
     if (value) {
+      gatewayEnv[k] = value;
+    }
+  }
+
+  // Overlay provider-enumerated secrets BENEATH the values above (fill only
+  // keys still absent), so a `command`-provider user gets the same resolved
+  // key set on the gateway-spawn path as on the CLI fallback path:
+  // process.env > .env > provider.
+  for (const [k, value] of Object.entries(providerListSafe(profile))) {
+    if (value && !gatewayEnv[k]) {
       gatewayEnv[k] = value;
     }
   }

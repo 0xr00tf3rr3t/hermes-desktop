@@ -72,7 +72,11 @@ export function parseSecretOutput(
 
   // 2. The output is a multi-key dotenv dump that does NOT contain the wanted
   //    key → null, rather than mis-returning an unrelated line as a bare value.
-  if (dotenvLines.length > 0) return null;
+  //    Only ≥2 env-shaped lines count as a dump: a SINGLE non-matching
+  //    env-shaped line falls through to the bare-value branch, because a bare
+  //    secret can itself match the KEY=VALUE shape (e.g. base64 with '='
+  //    padding, "dGVzdA==") and must not be misclassified as a dump.
+  if (dotenvLines.length > 1) return null;
 
   // 3. Otherwise treat the whole output as a single bare value (a per-key
   //    helper that printed just the secret).
@@ -132,11 +136,17 @@ export class CommandSecretsProvider implements SecretsProvider {
       });
       return parseSecretOutput(stdout, key);
     } catch (err) {
-      // Non-zero exit, timeout, spawn failure — degrade to "no value". Log the
-      // REASON (never the secret value or command string) so a misconfigured
-      // helper is diagnosable instead of silently resolving to null.
+      // Non-zero exit, timeout, spawn failure — degrade to "no value". Log
+      // ONLY structured fields (errno / exit status / signal), never
+      // err.message: for execFileSync a non-zero exit embeds the full command
+      // string and the helper's entire stderr in the message, either of which
+      // can carry secret material.
+      const e = err as NodeJS.ErrnoException & {
+        status?: number;
+        signal?: string;
+      };
       console.warn(
-        `[secrets:command] get(${key}) failed; resolving null: ${(err as Error).message}`,
+        `[secrets:command] get(${key}) failed; resolving null: code=${e.code ?? e.status ?? "?"} signal=${e.signal ?? "none"}`,
       );
       return null;
     }
@@ -170,8 +180,14 @@ export class CommandSecretsProvider implements SecretsProvider {
       }
       return out;
     } catch (err) {
+      // Same rule as get(): structured fields only, never err.message (it
+      // embeds the command string and the helper's stderr).
+      const e = err as NodeJS.ErrnoException & {
+        status?: number;
+        signal?: string;
+      };
       console.warn(
-        `[secrets:command] list() failed; resolving {}: ${(err as Error).message}`,
+        `[secrets:command] list() failed; resolving {}: code=${e.code ?? e.status ?? "?"} signal=${e.signal ?? "none"}`,
       );
       return {};
     }

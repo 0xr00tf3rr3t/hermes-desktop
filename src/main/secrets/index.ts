@@ -8,15 +8,25 @@ export type { SecretsProvider } from "./provider";
 const envProvider = new EnvSecretsProvider();
 const commandProvider = new CommandSecretsProvider();
 
+/** Unknown `secrets.provider` ids already warned about — one log line per id. */
+const warnedUnknownProviderIds = new Set<string>();
+
 /**
  * Select the configured secrets provider for a profile. Reads
  * `secrets.provider` from config.yaml; anything other than "command" (including
  * unset) falls back to the default `env` provider — so a zero-config install is
- * unchanged.
+ * unchanged. An unrecognized NON-EMPTY id still falls back to `env`, but warns
+ * once so a typo (e.g. "comand") doesn't silently mask a vault-backed setup.
  */
 export function getSecretsProvider(profile?: string): SecretsProvider {
   const id = (getConfigValue("secrets.provider", profile) || "").trim();
   if (id === "command") return commandProvider;
+  if (id && id !== "env" && !warnedUnknownProviderIds.has(id)) {
+    warnedUnknownProviderIds.add(id);
+    console.warn(
+      `[secrets] unknown secrets.provider "${id}"; falling back to env`,
+    );
+  }
   return envProvider;
 }
 
