@@ -111,6 +111,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const connLoaded = useRef(false);
   const [apiServerKeyMissing, setApiServerKeyMissing] = useState(false);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [refreshingVault, setRefreshingVault] = useState(false);
 
   // SSH connection state
   const [sshHost, setSshHost] = useState("");
@@ -211,6 +212,15 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
 
+  // 10s polling so vault rotations refresh the warning UI without requiring
+  // navigation. Mirrors Gateway.tsx so both screens have the same cadence.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadConfig();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [loadConfig]);
+
   const saveHttpProxy = useCallback(async (): Promise<void> => {
     const trimmed = httpProxyRef.current.trim();
     if (trimmed === savedHttpProxyRef.current) return;
@@ -236,6 +246,18 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       void saveHttpProxy();
     };
   }, [saveHttpProxy]);
+
+  async function refreshFromVault(): Promise<void> {
+    setRefreshingVault(true);
+    try {
+      await window.hermesAPI.invalidateSecretsCache();
+      await loadConfig();
+    } catch {
+      // fail silently — the 10s poll will catch up
+    } finally {
+      setRefreshingVault(false);
+    }
+  }
 
   async function handleMigrate(): Promise<void> {
     setMigrating(true);
@@ -334,7 +356,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         parseInt(sshRemotePort, 10) || 8642,
       );
       setConnTesting(false);
-      setConnStatus(ok ? t("settings.sshSuccess") : t("settings.sshErrorFailedSimple"));
+      setConnStatus(
+        ok ? t("settings.sshSuccess") : t("settings.sshErrorFailedSimple"),
+      );
     } else {
       const url = connRemoteUrl.trim();
       if (!url) {
@@ -348,7 +372,11 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         getConnectionApiKeyForSave(),
       );
       setConnTesting(false);
-      setConnStatus(ok ? t("settings.remoteSuccess") : t("settings.remoteErrorFailedSimple"));
+      setConnStatus(
+        ok
+          ? t("settings.remoteSuccess")
+          : t("settings.remoteErrorFailedSimple"),
+      );
     }
   }
 
@@ -592,7 +620,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       </div>
 
       <div className="settings-section">
-        <div className="settings-section-title">{t("settings.communityTitle")}</div>
+        <div className="settings-section-title">
+          {t("settings.communityTitle")}
+        </div>
         <div className="settings-field">
           <div className="settings-field-hint" style={{ marginBottom: 10 }}>
             {t("settings.communityHint")}
@@ -678,7 +708,18 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 setTimeout(() => setConnStatus(null), 4000);
               }}
             >
-              {generatingKey ? t("settings.generating") : t("settings.generateKey")}
+              {generatingKey
+                ? t("settings.generating")
+                : t("settings.generateKey")}
+            </button>
+            <button
+              className="btn btn-secondary"
+              disabled={refreshingVault}
+              onClick={() => void refreshFromVault()}
+            >
+              {refreshingVault
+                ? t("settings.refreshingFromVault")
+                : t("settings.refreshFromVault")}
             </button>
           </div>
         ) : (
@@ -756,7 +797,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         {connMode === "ssh" && (
           <>
             <div className="settings-field">
-              <label className="settings-field-label">{t("settings.sshHost")}</label>
+              <label className="settings-field-label">
+                {t("settings.sshHost")}
+              </label>
               <input
                 className="input"
                 type="text"
@@ -766,7 +809,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               />
             </div>
             <div className="settings-field">
-              <label className="settings-field-label">{t("settings.sshPort")}</label>
+              <label className="settings-field-label">
+                {t("settings.sshPort")}
+              </label>
               <input
                 className="input"
                 type="number"
@@ -776,7 +821,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
               />
             </div>
             <div className="settings-field">
-              <label className="settings-field-label">{t("settings.sshUsername")}</label>
+              <label className="settings-field-label">
+                {t("settings.sshUsername")}
+              </label>
               <input
                 className="input"
                 type="text"
@@ -815,7 +862,9 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
                 placeholder="8642"
               />
               <div className="settings-field-hint">
-                {t("settings.sshHint", { cmd: `${sshUser || "user"}@${sshHost || "host"}` })}
+                {t("settings.sshHint", {
+                  cmd: `${sshUser || "user"}@${sshHost || "host"}`,
+                })}
               </div>
             </div>
             <div className="settings-hermes-actions">
