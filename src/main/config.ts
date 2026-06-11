@@ -10,6 +10,10 @@ import {
   safeWriteFile,
 } from "./utils";
 import { getYamlPath } from "./yaml-path";
+// NOTE: ./secrets imports back into this module (getConfigValue / readEnv).
+// The cycle is safe because both sides only call each other's functions at
+// call time, never during module initialization.
+import { providerListSafe } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
   expectedEnvKeyForUrl,
@@ -972,7 +976,26 @@ export function getApiServerKey(profile?: string): string {
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const envForProfile = readEnv(profile);
+  // Overlay the secrets provider's enumerable map BENEATH the `.env` file view,
+  // mirroring the process.env > .env > provider resolution order used
+  // everywhere else: a key is filled from the provider only when neither the
+  // `.env` file nor process.env already has it. A no-op for the default env
+  // provider (its list() IS the `.env` map); for a `command`-provider user this
+  // is what lets a vault-stored API_SERVER_KEY reach the 6-source resolver (as
+  // its canonical `envProfile` arm — deliberately NOT a 7th source, so the
+  // env-provider resolve-precedence policy is unchanged). Copy before
+  // overlaying: readEnv() returns a shared cached object that must not be
+  // mutated with provider values.
+  const envForProfile: Record<string, string> = { ...readEnv(profile) };
+  try {
+    for (const [k, v] of Object.entries(providerListSafe(profile))) {
+      if (v && !envForProfile[k] && !(process.env[k] ?? "").trim()) {
+        envForProfile[k] = v;
+      }
+    }
+  } catch {
+    // secrets module not available — fall through to the env-only view
+  }
   const sources: ApiKeySources = {
     configTopLevelProfile: getConfigValue("API_SERVER_KEY", profile),
     configTopLevelDefault:

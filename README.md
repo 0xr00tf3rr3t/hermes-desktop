@@ -259,6 +259,52 @@ Hermes files are managed in:
 - `~/.hermes/state.db` — session history database
 - `~/.hermes/cron/jobs.json` — scheduled tasks
 
+## Secrets provider
+
+By default, API keys live in `~/.hermes/.env` (the **env** provider). No
+configuration is needed — this is byte-for-byte the historical behavior, and
+nothing changes for you.
+
+If you'd rather not keep keys in a plaintext `.env`, the opt-in **command**
+provider resolves them by running a helper command you configure. Resolution
+order everywhere is: `process.env` → `.env` → provider → unset.
+
+Per-key helper (the requested key name arrives as `$HERMES_SECRET_KEY`):
+
+```yaml
+# ~/.hermes/config.yaml
+secrets:
+  provider: command
+  command: secret-tool lookup hermes "$HERMES_SECRET_KEY"
+```
+
+Or a helper that dumps a dotenv blob (e.g. a vault that unseals into tmpfs):
+
+```yaml
+secrets:
+  provider: command
+  command: "cat /run/user/1000/hermes-secrets.env"
+```
+
+The helper's stdout may be either a single bare value (per-key helpers) or
+`KEY=VALUE` lines (dotenv dumps); both shapes are auto-detected.
+
+Security model:
+
+- The command string is your own configuration — same trust level as `.env`.
+  It runs via `/bin/sh -c`, so the command provider is POSIX-only
+  (Linux/macOS); Windows stays on the env provider.
+- The helper inherits the process environment plus `HERMES_SECRET_KEY`; the
+  key name is passed as data, never interpolated into the shell string.
+- Hard 3-second timeout (resolution is synchronous on the main process — keep
+  helpers fast and non-interactive), 1 MiB output cap, and stderr is discarded.
+- Resolved values are never logged or written to disk; failures degrade to
+  "key unset", logging only exit code/signal.
+- The gateway-spawn broadcast uses a single `list()` call, never a per-key
+  helper loop.
+
+Source of truth: [`src/main/secrets/`](src/main/secrets/).
+
 ## Tech Stack
 
 - **Electron** 39 — cross-platform desktop shell

@@ -1,4 +1,7 @@
-import { execFileSync } from "child_process";
+import {
+  execFileSync,
+  type ExecFileSyncOptionsWithStringEncoding,
+} from "child_process";
 import type { SecretsProvider } from "./provider";
 import { getConfigValue } from "../config";
 
@@ -114,6 +117,28 @@ export function parseSecretOutput(
  *     could detect the platform and use `cmd /c`/PowerShell, but that is out of
  *     scope for this opt-in provider.
  */
+/**
+ * Spawn options shared by get() and list() — exported so the F6 regression
+ * test can pin the stdio contract at the options layer (an inherited stderr
+ * bypasses any in-process JS spy, so it can't be observed behaviorally).
+ */
+export function helperExecOptions(
+  secretKey: string,
+): ExecFileSyncOptionsWithStringEncoding {
+  return {
+    // Key passed as DATA via env — never interpolated into the command.
+    env: { ...process.env, HERMES_SECRET_KEY: secretKey },
+    timeout: COMMAND_TIMEOUT_MS,
+    maxBuffer: MAX_OUTPUT_BYTES,
+    encoding: "utf-8",
+    // F6: execFileSync's default stdio inherits stderr, streaming the helper's
+    // diagnostics (which can carry secret material) straight into the Electron
+    // main process's stderr. Pipe it instead and discard.
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  };
+}
+
 export class CommandSecretsProvider implements SecretsProvider {
   readonly id = "command";
 
@@ -126,14 +151,11 @@ export class CommandSecretsProvider implements SecretsProvider {
     const command = this.command(profile);
     if (!command) return null;
     try {
-      const stdout = execFileSync("/bin/sh", ["-c", command], {
-        // Key passed as DATA via env — never interpolated into the command.
-        env: { ...process.env, HERMES_SECRET_KEY: key },
-        timeout: COMMAND_TIMEOUT_MS,
-        maxBuffer: MAX_OUTPUT_BYTES,
-        encoding: "utf-8",
-        windowsHide: true,
-      });
+      const stdout = execFileSync(
+        "/bin/sh",
+        ["-c", command],
+        helperExecOptions(key),
+      );
       return parseSecretOutput(stdout, key);
     } catch (err) {
       // Non-zero exit, timeout, spawn failure — degrade to "no value". Log
@@ -162,13 +184,11 @@ export class CommandSecretsProvider implements SecretsProvider {
     const command = this.command(profile);
     if (!command) return {};
     try {
-      const stdout = execFileSync("/bin/sh", ["-c", command], {
-        env: { ...process.env, HERMES_SECRET_KEY: "" },
-        timeout: COMMAND_TIMEOUT_MS,
-        maxBuffer: MAX_OUTPUT_BYTES,
-        encoding: "utf-8",
-        windowsHide: true,
-      });
+      const stdout = execFileSync(
+        "/bin/sh",
+        ["-c", command],
+        helperExecOptions(""),
+      );
       const out: Record<string, string> = {};
       const ENV_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
       for (const raw of stdout.replace(/\r\n/g, "\n").split("\n")) {

@@ -314,7 +314,16 @@ export async function transcribeAudio(
 
   // Resolve the provider key the same way the chat path does: URL-specific key
   // first, then the generic CUSTOM_API_KEY / OPENAI_API_KEY fallbacks.
-  const env = readEnv(resolved);
+  // The secrets provider's enumerable map is overlaid BENEATH the `.env` file
+  // (.env wins, mirroring the process.env > .env > provider order used
+  // everywhere else): a no-op for the default env provider, and the only way a
+  // `command`-provider user with vault-stored keys gets an Authorization header.
+  const baseEnv = readEnv(resolved);
+  const providerOverlay = providerListSafe(resolved);
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(baseEnv)) if (v) env[k] = v;
+  for (const [k, v] of Object.entries(providerOverlay))
+    if (v && !env[k]) env[k] = v;
   let apiKey = "";
   for (const { pattern, envKey } of URL_KEY_MAP) {
     if (pattern.test(baseUrl)) {
