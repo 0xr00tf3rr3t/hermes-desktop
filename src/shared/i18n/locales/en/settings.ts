@@ -172,4 +172,6 @@ export default {
   remoteErrorRequiredSimple: "Please enter a URL",
   remoteErrorFailedSimple: "Could not reach server",
   apiGenerated: "API key generated — gateway restarting…",
+  refreshFromVault: "Refresh from vault",
+  refreshingFromVault: "Refreshing…",
 } as const;

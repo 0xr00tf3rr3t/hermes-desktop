@@ -332,6 +332,7 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }>;
   generateApiServerKey: (profile?: string) => Promise<{ key: string }>;
+  invalidateSecretsCache: () => Promise<void>;
   copyToClipboard: (text: string) => Promise<void>;
   onContextMenuCopyChat: (
     callback: (format: "text" | "markdown") => void,
