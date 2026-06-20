@@ -23,7 +23,7 @@ import { getDashboardStatus, startDashboard, stopDashboard } from "../dashboard"
 import { startSshTunnel, ensureSshTunnel, getSshTunnelUrl, stopSshTunnel, testSshConnection, isSshTunnelActive, isSshTunnelHealthy } from "../ssh-tunnel";
 import { getClaw3dStatus, setupClaw3d, startDevServer, stopDevServer, startAdapter, stopAdapter, startAll as startClaw3dAll, stopAll as stopClaw3d, getClaw3dLogs, setClaw3dPort, getClaw3dPort, setClaw3dWsUrl, getClaw3dWsUrl, waitForClaw3dReady, type Claw3dSetupProgress } from "../claw3d";
 import { startOfficeStack } from "../office-start";
-import { readEnv, setEnvValue, getConfigValue, setConfigValue, getHermesHome, getModelConfig, setModelConfig, getCredentialPool, setCredentialPool, addCredentialPoolEntry, getConnectionConfig, getPublicConnectionConfig, normalizeRemoteChatTransport, resolveConnectionApiKeyUpdate, setConnectionConfig, getPlatformEnabled, setPlatformEnabled, getApiServerKeyStatus, invalidateSecretsCache, type ConnectionConfig } from "../config";
+import { readEnv, setEnvValue, getConfigValue, setConfigValue, getHermesHome, getModelConfig, setModelConfig, getCredentialPool, setCredentialPool, addCredentialPoolEntry, getConnectionConfig, getPublicConnectionConfig, normalizeRemoteChatTransport, resolveConnectionApiKeyUpdate, setConnectionConfig, getPlatformEnabled, setPlatformEnabled, getApiServerKeyStatus, invalidateSecretsCache, secretsProviderStatus, secretsProviderCanWrite, type ConnectionConfig } from "../config";
 import { getAuxiliaryConfig, setAuxiliaryTask, resetAuxiliaryToAuto } from "../auxiliary-config";
 import { applySessionLocalOverlays, listSessions, getSessionMessages, searchSessions, deleteSession, deleteSessions } from "../sessions";
 import { syncSessionCache, listCachedSessions, updateSessionTitle } from "../session-cache";
@@ -579,6 +579,100 @@ export function registerIpcHandlers(context: IpcContext): void {
   // immediately instead of waiting out the cache TTL.
   ipcMain.handle("invalidate-secrets-cache", () => {
     invalidateSecretsCache();
+  });
+
+  // Active secret provider + the NAMES of keys it resolves (never values) —
+  // powers the Settings "Security Providers" section's status + Test button.
+  ipcMain.handle("secrets-provider-status", (_event, profile?: string) => {
+    return secretsProviderStatus(profile);
+  });
+
+  // Whether the vault can be edited/deleted from the UI right now (helper
+  // configured AND vault currently unlocked-and-resolving). Booleans only.
+  ipcMain.handle("secrets-provider-can-write", (_event, profile?: string) => {
+    return secretsProviderCanWrite(profile);
+  });
+
+  // Write/update one secret in the vault. The value is delivered to the helper
+  // on stdin and NEVER logged or echoed back across IPC — only ok/err returns.
+  // Guarded by the same can-write gate the UI uses, so a renderer can't bypass
+  // the "unlocked + helper configured" requirement.
+  ipcMain.handle(
+    "secrets-provider-write",
+    async (_event, key: string, value: string, profile?: string) => {
+      const gate = secretsProviderCanWrite(profile);
+      if (!gate.canWrite) return { ok: false, error: "write-not-permitted" };
+      const { commandWriteSecret } = await import(
+        "../secrets/commandProviderWrite"
+      );
+      const result = await commandWriteSecret(key, value, profile).catch(
+        () => ({ ok: false as const, error: "write-failed" }),
+      );
+      if (result.ok) invalidateSecretsCache();
+      return result;
+    },
+  );
+
+  // Delete one secret from the vault. Same gate; key NAME only crosses IPC.
+  ipcMain.handle(
+    "secrets-provider-delete",
+    async (_event, key: string, profile?: string) => {
+      const gate = secretsProviderCanWrite(profile);
+      if (!gate.canDelete) return { ok: false, error: "delete-not-permitted" };
+      const { commandDeleteSecret } = await import(
+        "../secrets/commandProviderWrite"
+      );
+      const result = await commandDeleteSecret(key, profile).catch(() => ({
+        ok: false as const,
+        error: "delete-failed",
+      }));
+      if (result.ok) invalidateSecretsCache();
+      return result;
+    },
+  );
+
+  // ── Vault bootstrap (first-run onboarding) ────────────────────────────────
+  // Detect an existing secrets source (tmpfs dump or a vault on disk) so the
+  // setup wizard can auto-fill instead of dead-ending. Returns NAMES/paths
+  // only — never a secret value (the tmpfs key enumeration is names-only).
+  ipcMain.handle("vault-detect-existing", async () => {
+    const { detectExistingVault } = await import("../secrets/vaultBootstrap");
+    return detectExistingVault();
+  });
+
+  // What tooling is available for the create/seal paths (keepassxc-cli, TPM).
+  // Drives whether the UI offers "create new vault" vs an install hint — the
+  // dependency-honesty contract: never a silent missing-dependency dead end.
+  ipcMain.handle("vault-tool-availability", async () => {
+    const { checkToolAvailability } = await import("../secrets/vaultBootstrap");
+    return checkToolAvailability();
+  });
+
+  // Create a NEW key-file-backed KeePassXC vault at a UID-safe default location
+  // (or an explicit path). Returns the ready `secrets.command` and the resolved
+  // paths — never the key-file contents. The renderer persists the command and
+  // switches the provider; this handler does NOT mutate config itself so the
+  // create step stays a pure, reviewable side-effect.
+  ipcMain.handle(
+    "vault-create",
+    async (_event, opts?: { vaultPath?: string; keyPath?: string }) => {
+      const { createVault } = await import("../secrets/vaultBootstrap");
+      // AIR-016: createVault is async (db-create can block seconds); await it so
+      // the main thread stays free while the vault is created.
+      return await createVault(opts);
+    },
+  );
+
+  // OPT-IN: seal a freshly created key-file to the TPM for boot auto-unlock.
+  // Conservative — reports sealed:false honestly (and ensures a 0600 fallback)
+  // whenever a real TPM seal cannot be confirmed, so the UI never claims
+  // hardware protection that didn't happen.
+  ipcMain.handle("vault-seal-tpm", async (_event, keyPath: string) => {
+    const { sealKeyFileToTpm } = await import("../secrets/vaultBootstrap");
+    // AIR-016: sealKeyFileToTpm is async (the TPM seal can block 7–15s); await
+    // it so the handler resolves only when done, while the main thread stayed
+    // free the whole time (the renderer keeps painting its spinner).
+    return await sealKeyFileToTpm(keyPath);
   });
 
   ipcMain.handle(

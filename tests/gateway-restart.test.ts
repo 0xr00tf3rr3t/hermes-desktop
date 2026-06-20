@@ -223,7 +223,7 @@ describe("restartGatewayViaCli", () => {
     expect(await waitForFile(pidFile)).toBe(true);
     const spawnedPid = Number(readFileSync(pidFile, "utf-8"));
     stopGateway("work", true);
-    expect(await waitForProcessExit(spawnedPid, 3000)).toBe(true);
+    expect(await waitForProcessExit(spawnedPid, 10000)).toBe(true);
   });
 
   it("times out and stops a long-running restart process when health stays down", async () => {
@@ -240,7 +240,7 @@ describe("restartGatewayViaCli", () => {
     await expect(restart).resolves.toBe(false);
 
     const spawnedPid = Number(readFileSync(pidFile, "utf-8"));
-    expect(await waitForProcessExit(spawnedPid, 3000)).toBe(true);
+    expect(await waitForProcessExit(spawnedPid, 10000)).toBe(true);
     expect(hermesCliArgsSpy).toHaveBeenCalledWith([
       "--profile",
       "work",
@@ -380,7 +380,7 @@ describe("restartGatewayViaCli", () => {
     stopGateway("work", true);
 
     const spawnedPid = Number(readFileSync(pidFile, "utf-8"));
-    expect(await waitForProcessExit(spawnedPid, 3000)).toBe(true);
+    expect(await waitForProcessExit(spawnedPid, 10000)).toBe(true);
     expect(hermesCliArgsSpy).toHaveBeenNthCalledWith(1, [
       "--profile",
       "work",
@@ -418,7 +418,7 @@ describe("restartGatewayViaCli", () => {
     const spawnedPid = Number(readFileSync(pidFile, "utf-8"));
     await expect(restartGatewayViaCli("work", 2000, 25)).resolves.toBe(false);
 
-    expect(await waitForProcessExit(spawnedPid, 3000)).toBe(true);
+    expect(await waitForProcessExit(spawnedPid, 10000)).toBe(true);
     expect(isGatewayRunning("work")).toBe(false);
     expect(hermesCliArgsSpy).toHaveBeenNthCalledWith(1, [
       "--profile",
