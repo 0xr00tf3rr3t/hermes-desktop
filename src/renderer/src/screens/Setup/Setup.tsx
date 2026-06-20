@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ExternalLink } from "../../assets/icons";
+import { ArrowRight, ExternalLink, Check } from "../../assets/icons";
 import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
@@ -828,20 +828,32 @@ function Setup({
       {stage === "provider" && (
         <>
           <div className="setup-provider-grid">
-            {PROVIDERS.setup.map((p) => (
-              <button
-                key={p.id}
-                className={`setup-provider-card ${selectedProvider === p.id ? "selected" : ""}`}
-                onClick={() => {
-                  setSelectedProvider(p.id);
-                  setError("");
-                }}
-              >
-                <BrandLogo provider={p.id} size={24} matchTheme={true} />
-                <div className="setup-provider-name">{t(p.name)}</div>
-                {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
-              </button>
-            ))}
+            {PROVIDERS.setup.map((p) => {
+              const active = selectedProvider === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={active}
+                  className={`setup-provider-card ${active ? "selected" : ""}`}
+                  onClick={() => {
+                    setSelectedProvider(p.id);
+                    setError("");
+                  }}
+                >
+                  {active && (
+                    <span className="setup-provider-check" aria-hidden="true">
+                      <Check size={11} strokeWidth={3} />
+                    </span>
+                  )}
+                  <span className="setup-provider-logo">
+                    <BrandLogo provider={p.id} size={24} matchTheme={true} />
+                  </span>
+                  <div className="setup-provider-name">{t(p.name)}</div>
+                  {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
+                </button>
+              );
+            })}
           </div>
 
           <div className="setup-form">
