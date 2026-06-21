@@ -54,6 +54,49 @@ export default {
   back: "Back",
   finish: "Finish setup",
   secretsStepTitle: "Where should your keys live?",
+  secretsTitle: "Set Up Your Security Provider",
+  secretsSubtitle: "Choose where Hermes reads your API keys from",
+  secretsHelpLabel: "Open the secrets & vault setup guide",
+  secretsHelpTitle: "Secrets & Vault Setup",
+  secretsHelpLead:
+    "Hermes can read your AI provider API key from a vault instead of a plaintext file. The key never sits on disk in the clear, and the app only ever sees credential names — never the values.",
+  secretsHelpBackendsH: "Pick a backend",
+  secretsHelpEnv:
+    "Reads a plaintext .env. Simplest, but the key sits on disk unencrypted — fine for a throwaway box, migrate when ready.",
+  secretsHelpCommand:
+    "Runs any command that prints KEY=value lines (KeePassXC, pass, secret-tool, gpg, or your own script). Fully offline, most flexible.",
+  secretsHelpBitwarden:
+    "Bitwarden Secrets Manager via bws. Lowest maintenance if you're OK with a cloud backend.",
+  secretsHelpCreateH: "Create a vault from zero",
+  secretsHelpCreate1:
+    "Install a vault CLI — KeePassXC ships keepassxc-cli (apt install keepassxc), or use pass / secret-tool / gpg.",
+  secretsHelpCreate2:
+    "Create the database (use --set-password instead for a passphrase):",
+  secretsHelpCreate3:
+    "Add one entry per credential — entry title must equal the env-var name (or an accepted alias). The value is read from stdin, never the command line:",
+  secretsHelpCreate4:
+    "Wire the read command: point secrets.command at whatever prints the resolved KEY=value lines. Keep the vault unlocked when the app starts.",
+  secretsHelpCreate5:
+    "Test (names only): the test button lists which key names resolved and a count — never the values.",
+  secretsHelpCustomH: "Custom command",
+  secretsHelpCustom:
+    'The Vault command backend accepts ANY command — that\'s your custom security provider. Pick "Vault command" and, if no KeePassXC vault is auto-detected, enter your own read command:',
+  secretsHelpTpmH: "TPM-sealing the key-file (optional)",
+  secretsHelpTpm:
+    "A key-file-only vault unlocks with no passphrase, so the key-file itself must be protected. TPM-sealing binds it to THIS machine — copied elsewhere, the sealed blob is useless. The Setup screen's \"Seal to TPM\" button does this when it can; if it reports a privilege fallback, run the one-time command below yourself (it needs polkit/root, which a GUI app can't request):",
+  secretsHelpTpm1:
+    "Seal it (writes a TPM-bound <keyfile>.tpm blob; needs systemd-creds + a TPM 2.0 chip):",
+  secretsHelpTpm2:
+    "If you have no TPM or systemd-creds, the key-file falls back to 0600 (owner-only) permissions — still protected at rest, just not hardware-bound. The app reports honestly which of these happened; it never pretends a key is sealed when it isn't.",
+  secretsHelpAliasH: "Aliases just work.",
+  secretsHelpAlias:
+    "A vault that stores your Anthropic credential under a gateway or OAuth-token name still satisfies the ANTHROPIC_API_KEY check — accepted aliases are mapped automatically. Don't copy an OAuth token into the literal ANTHROPIC_API_KEY slot; that breaks the OAuth auth path.",
+  secretsHelpMultiH: "Using multiple profiles?",
+  secretsHelpMulti:
+    "Secrets resolution is per-profile. If a profile reports a key missing after you switch to it, that profile's config has no secrets block — add the same secrets: command block to every profile that should resolve from the vault.",
+  secretsHelpGoldenH: "Golden rule.",
+  secretsHelpGolden:
+    "No reversible secret on disk in plaintext. If a value ever appears on screen, in a log, or in a transcript, treat it as exposed and rotate it at the provider's console.",
   secretsStepSubtitle:
     "Hermes can read API keys from a vault instead of a plaintext file. You can change this anytime in Settings → Security Providers.",
   secrets_envTitle: "Plain file (.env)",
@@ -62,11 +105,11 @@ export default {
   secrets_commandTag: "Offline / KeePassXC, pass…",
   secrets_bitwardenTitle: "Bitwarden",
   secrets_bitwardenTag: "Cloud secrets manager",
-  secretsCommandLabel: "Helper command",
+  secretsCommandLabel: "Custom helper command",
   secretsCommandSetupHint:
     "You'll need a vault first. For KeePassXC: install keepassxc (provides keepassxc-cli), then create a vault — `keepassxc-cli db-create ~/secrets/h.kdbx --set-password` — and add an entry per key (entry title = the key name, e.g. OPENROUTER_API_KEY). The helper below reads from it. Keep the vault unlocked when Hermes starts. Full guide: hermes secrets — `configuring-secret-providers` skill.",
   secretsCommandHint:
-    "Runs a helper that prints the secret; the key name arrives in $HERMES_SECRET_KEY. You can fill this in later in Settings if you leave it blank.",
+    "Use ANY backend here — KeePassXC, pass, secret-tool, gpg, or your own script. Runs a helper that prints the secret; the key name arrives in $HERMES_SECRET_KEY. This is your custom security provider. Leave blank to fill it in later in Settings.",
   secretsBitwardenHint:
     "Finish Bitwarden setup from the terminal after this: hermes secrets bitwarden setup",
   secretsKeyStillSavedHint:

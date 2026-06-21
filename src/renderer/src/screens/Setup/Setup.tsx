@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ExternalLink, Check } from "../../assets/icons";
+import {
+  ArrowRight,
+  ExternalLink,
+  Check,
+  HelpCircle,
+} from "../../assets/icons";
 import { PROVIDERS, LOCAL_PRESETS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
+import SecretsHelpModal from "../../components/SecretsHelpModal";
 import BrandLogo from "../../components/common/BrandLogo";
 import {
   expectedEnvKeyForUrl,
@@ -61,6 +67,7 @@ function Setup({
     "env" | "command" | "bitwarden"
   >("env");
   const [secretsCommand, setSecretsCommand] = useState("");
+  const [showSecretsHelp, setShowSecretsHelp] = useState(false);
   // Key NAMES the chosen security provider can resolve (never values). Populated
   // by testing the provider in the secrets stage; drives the model step's
   // "vault already has this key" skip. Empty array = not tested / nothing.
@@ -476,15 +483,37 @@ function Setup({
           onDismiss={onDismissVerifyWarning}
         />
       )}
-      <h1 className="setup-title">{t("setup.title")}</h1>
-      <p className="setup-subtitle">{t("setup.subtitle")}</p>
+      <h1 className="setup-title">
+        {stage === "secrets" ? t("setup.secretsTitle") : t("setup.title")}
+      </h1>
+      <p className="setup-subtitle">
+        {stage === "secrets" ? t("setup.secretsSubtitle") : t("setup.subtitle")}
+      </p>
 
       {/* ── STAGE 1: security provider (where keys live) ─────────────────── */}
       {stage === "secrets" && (
         <div className="setup-form">
-          <h2 className="setup-label" style={{ fontSize: 16, marginBottom: 4 }}>
-            {t("setup.secretsStepTitle")}
-          </h2>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 4,
+            }}
+          >
+            <h2 className="setup-label" style={{ fontSize: 16, margin: 0 }}>
+              {t("setup.secretsStepTitle")}
+            </h2>
+            <button
+              type="button"
+              className="setup-help-btn"
+              aria-label={t("setup.secretsHelpLabel")}
+              title={t("setup.secretsHelpLabel")}
+              onClick={() => setShowSecretsHelp(true)}
+            >
+              <HelpCircle size={16} />
+            </button>
+          </div>
           <div className="setup-field-hint" style={{ marginBottom: 16 }}>
             {t("setup.secretsStepSubtitle")}
           </div>
@@ -824,6 +853,10 @@ function Setup({
         </div>
       )}
 
+      {showSecretsHelp && (
+        <SecretsHelpModal onClose={() => setShowSecretsHelp(false)} />
+      )}
+
       {/* ── STAGE 2: model provider ──────────────────────────────────────── */}
       {stage === "provider" && (
         <>
@@ -850,7 +883,9 @@ function Setup({
                     <BrandLogo provider={p.id} size={24} matchTheme={true} />
                   </span>
                   <div className="setup-provider-name">{t(p.name)}</div>
-                  {p.tag && <div className="setup-provider-tag">{t(p.tag)}</div>}
+                  {p.tag && (
+                    <div className="setup-provider-tag">{t(p.tag)}</div>
+                  )}
                 </button>
               );
             })}

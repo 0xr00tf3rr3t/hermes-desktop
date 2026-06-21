@@ -1175,6 +1175,102 @@ body {
   width: 100%;
 }
 
+.setup-help-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted, #8b97a8);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.setup-help-btn:hover {
+  color: var(--accent-text, #5b8cff);
+  background: var(--surface-hover, rgba(91, 140, 255, 0.12));
+}
+
+.setup-help-btn:focus-visible {
+  outline: 2px solid var(--accent-text, #5b8cff);
+  outline-offset: 1px;
+}
+
+.secrets-help-modal {
+  background: var(--surface, #151a23);
+  border: 1px solid var(--border, #2a3340);
+  border-radius: 12px;
+  width: min(620px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.secrets-help-body {
+  padding: 18px 22px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.secrets-help-body h3 {
+  font-size: 14px;
+  margin: 18px 0 6px;
+  color: var(--accent-text, #5b8cff);
+}
+
+.secrets-help-lead {
+  color: var(--text-muted, #8b97a8);
+  margin-top: 0;
+}
+
+.secrets-help-substep {
+  margin: 8px 0 2px;
+  font-size: 13px;
+}
+
+.secrets-help-body ul,
+.secrets-help-body ol {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+
+.secrets-help-body li {
+  margin: 5px 0;
+}
+
+.secrets-help-body pre {
+  background: var(--code-bg, #0a0d13);
+  border: 1px solid var(--border, #2a3340);
+  border-radius: 7px;
+  padding: 9px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+
+.secrets-help-callout {
+  border-radius: 8px;
+  padding: 11px 13px;
+  margin: 14px 0;
+  font-size: 13px;
+  background: var(--surface-2, #1b212c);
+}
+
+.secrets-help-warn {
+  border-left: 3px solid var(--warn, #e0a23c);
+}
+
+.secrets-help-danger {
+  border-left: 3px solid var(--danger, #e0564c);
+}
+
 /* The Providers tab reuses the setup preset chips for its main provider
    picker (flex-wrap, logo + name), consistent with the local/remote chips. */
 .providers-provider-chips {
